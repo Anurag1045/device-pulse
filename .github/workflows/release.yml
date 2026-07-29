@@ -1,0 +1,52 @@
+name: Release Pipeline
+
+# TRIGGER: Only runs when you push a version tag like v1.0.0
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies and run tests
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests/ -v
+
+      - name: Build Docker image with release tag
+        run: |
+          docker build \
+            --tag device-pulse:${{ github.ref_name }} \
+            --tag device-pulse:latest \
+            .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ github.ref_name }}"
+          body: |
+            ## Device Pulse ${{ github.ref_name }}
+
+            ### What's included
+            - Docker image built and tested
+            - All unit and integration tests passed
+
+            ### How to run
+            ```bash
+            docker pull device-pulse:${{ github.ref_name }}
+            docker run -p 8000:8000 device-pulse:${{ github.ref_name }}
+            ```
+          generate_release_notes: true

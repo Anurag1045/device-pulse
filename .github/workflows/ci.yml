@@ -1,0 +1,67 @@
+name: CI Pipeline
+
+# TRIGGER: When does this pipeline run?
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Run all tests
+  # ─────────────────────────────────────────────
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    # Matrix: run tests on multiple Python versions in parallel
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip  # cache pip downloads between runs
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Build Docker image (only if tests pass)
+  # ─────────────────────────────────────────────
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test  # waits for 'test' job to succeed first
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag device-pulse:${{ github.sha }} \
+            --tag device-pulse:latest \
+            .
+
+      - name: Smoke test the container
+        run: |
+          docker run -d --name pulse-test -p 8000:8000 device-pulse:latest
+          sleep 3
+          curl --fail http://localhost:8000/health
+          docker stop pulse-test
+          docker rm pulse-test
