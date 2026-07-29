@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify
+from datetime import datetime, timezone
 from app.models import HealthReport
 from app.analyzer import analyze
 
 app = Flask(__name__)
 app.config["VERSION"] = "1.0.0"
+_started_at = datetime.now(timezone.utc)
 
 # In-memory store: { device_id: [HealthReport, ...] }
 _store: dict[str, list[HealthReport]] = {}
@@ -65,3 +67,17 @@ def get_history(device_id: str):
 @app.get("/devices")
 def list_devices():
     return jsonify({"devices": list(_store.keys()), "count": len(_store)})
+
+
+@app.get("/stats")
+def stats():
+    total_reports = sum(len(reports) for reports in _store.values())
+    unhealthy = [d for d, reports in _store.items() if reports and analyze(reports[-1])]
+    uptime_seconds = (datetime.now(timezone.utc) - _started_at).total_seconds()
+    return jsonify({
+        "uptime_seconds": round(uptime_seconds, 1),
+        "total_devices": len(_store),
+        "total_reports": total_reports,
+        "unhealthy_devices": unhealthy,
+        "unhealthy_count": len(unhealthy),
+    })

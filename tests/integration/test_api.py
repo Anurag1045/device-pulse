@@ -91,3 +91,25 @@ def test_history_returns_all_reports(client):
 def test_submit_report_missing_fields_returns_400(client):
     response = client.post("/devices/spectacles-005/report", json={"battery_percent": 80.0})
     assert response.status_code == 400
+
+
+def test_stats_returns_summary(client):
+    client.post("/devices/spectacles-006/report", json={
+        "battery_percent": 5.0,   # triggers LOW_BATTERY alert
+        "temperature_celsius": 30.0,
+        "wifi_signal_dbm": -60.0,
+        "storage_used_percent": 50.0,
+    })
+    client.post("/devices/spectacles-007/report", json={
+        "battery_percent": 80.0,
+        "temperature_celsius": 30.0,
+        "wifi_signal_dbm": -60.0,
+        "storage_used_percent": 50.0,
+    })
+    response = client.get("/stats")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["total_devices"] == 2
+    assert data["total_reports"] == 2
+    assert data["unhealthy_count"] == 1
+    assert "spectacles-006" in data["unhealthy_devices"]
